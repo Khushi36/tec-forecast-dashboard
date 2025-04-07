@@ -1,0 +1,21 @@
+body {
+    background-color: #111827;
+    color: #e5e7eb;
+}
+
+h1, h2, h3 {
+    color: #60a5fa;
+}
+
+.sidebar .sidebar-content {
+    background-color: #1f2937;
+}
+
+.stButton>button {
+    background-color: #2563eb;
+    color: white;
+}
+
+.stRadio>div>label {
+    color: #e5e7eb;
+}
