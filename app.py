@@ -3,6 +3,9 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import plotly.express as px
+import joblib
+import os
+from sklearn.preprocessing import MinMaxScaler
 
 st.set_page_config(page_title="TEC Forecast Dashboard", layout="wide")
 
@@ -52,15 +55,30 @@ else:
     except:
         st.error("Please upload a real TEC dataset in 'data/sample_real_tec.csv'")
 
-# Forecasting Function (Placeholder)
-def dummy_forecast(df, days):
-    last_value = df['TEC'].iloc[-1]
-    forecast = [last_value + np.random.normal(0, 1) for _ in range(days)]
+# Forecasting Function using Trained LSTM Model
+def lstm_forecast(df, model_path="model/lstm_model.pkl", days=7, window_size=24):
+    scaler = MinMaxScaler()
+    scaled_data = scaler.fit_transform(df[['TEC']])
+
+    sequence = scaled_data[-window_size:].reshape(1, window_size, 1)
+
+    model = joblib.load(model_path)
+    predictions = []
+
+    for _ in range(days):
+        pred = model.predict(sequence)[0][0]
+        predictions.append(pred)
+        sequence = np.append(sequence[:, 1:, :], [[[pred]]], axis=1)
+
+    forecast_values = scaler.inverse_transform(np.array(predictions).reshape(-1, 1)).flatten()
     forecast_dates = pd.date_range(start=df['Date'].iloc[-1] + pd.Timedelta(days=1), periods=days)
-    return pd.DataFrame({'Date': forecast_dates, 'Forecast_TEC': forecast})
+    return pd.DataFrame({'Date': forecast_dates, 'Forecast_TEC': forecast_values})
 
 # Generate Forecast
-forecast_df = dummy_forecast(tec_df, forecast_days)
+if os.path.exists("model/lstm_model.pkl"):
+    forecast_df = lstm_forecast(tec_df, days=forecast_days)
+else:
+    forecast_df = pd.DataFrame()
 
 # Plotting
 tab1, tab2 = st.tabs(["📈 TEC Trend", "🔮 Forecast"])
@@ -70,19 +88,23 @@ with tab1:
     st.plotly_chart(fig1, use_container_width=True)
 
 with tab2:
-    fig2 = px.line(forecast_df, x="Date", y="Forecast_TEC", title=f"{forecast_days}-Day TEC Forecast")
-    st.plotly_chart(fig2, use_container_width=True)
+    if not forecast_df.empty:
+        fig2 = px.line(forecast_df, x="Date", y="Forecast_TEC", title=f"{forecast_days}-Day TEC Forecast")
+        st.plotly_chart(fig2, use_container_width=True)
+    else:
+        st.warning("Forecasting model not found or error in prediction.")
 
 # Export Options
 st.sidebar.title("📤 Export Options")
 export_type = st.sidebar.radio("Export Forecast As", ("CSV", "PNG"))
 
-if export_type == "CSV":
-    st.sidebar.download_button("Download CSV", forecast_df.to_csv(index=False), "forecast.csv")
-else:
-    fig, ax = plt.subplots()
-    ax.plot(forecast_df['Date'], forecast_df['Forecast_TEC'], marker='o')
-    ax.set_title('TEC Forecast')
-    ax.set_xlabel('Date')
-    ax.set_ylabel('Forecast TEC')
-    st.sidebar.download_button("Download PNG", data=None, file_name="forecast.png", mime="image/png")  # dummy until download_png is added
+if not forecast_df.empty:
+    if export_type == "CSV":
+        st.sidebar.download_button("Download CSV", forecast_df.to_csv(index=False), "forecast.csv")
+    else:
+        fig, ax = plt.subplots()
+        ax.plot(forecast_df['Date'], forecast_df['Forecast_TEC'], marker='o')
+        ax.set_title('TEC Forecast')
+        ax.set_xlabel('Date')
+        ax.set_ylabel('Forecast TEC')
+        st.sidebar.pyplot(fig)
